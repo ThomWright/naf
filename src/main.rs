@@ -7,8 +7,10 @@ use termion::screen::AlternateScreen;
 use termion::{cursor, terminal_size};
 
 struct State {
-    path: std::path::PathBuf,
-    entries: Vec<FileInfo>,
+    term_size: (u16, u16),
+    base_path: std::path::PathBuf,
+    files: Vec<FileInfo>,
+    selected_file: usize,
 }
 
 struct FileInfo {
@@ -28,7 +30,7 @@ fn main() -> Result<(), std::io::Error> {
         let screen = AlternateScreen::from(stdout);
         let mut screen = cursor::HideCursor::from(screen);
 
-        let size = terminal_size().unwrap();
+        let term_size = terminal_size().unwrap();
 
         let init_path = std::env::current_dir()?;
         let mut entries = init_path.as_path().read_dir().map_or(vec![], |contents| {
@@ -48,42 +50,59 @@ fn main() -> Result<(), std::io::Error> {
         });
         entries.sort_by(|f1, f2| f1.name.cmp(&f2.name));
 
-        let state = State {
-            path: init_path,
-            entries,
+        let mut state = State {
+            term_size,
+            base_path: init_path,
+            files: entries,
+            selected_file: 0,
         };
 
-        // draw
-        write!(screen, "{}", termion::cursor::Goto(1, 1))?;
-        for s in state.entries {
-            if s.is_dir {
-                write!(
-                    screen,
-                    "{}{}",
-                    termion::style::Bold,
-                    termion::color::Fg(termion::color::LightBlue)
-                )?;
-            }
-            write!(screen, "{}\r\n", s.name)?;
-            write!(screen, "{}", termion::style::Reset)?;
-        }
-        write!(screen, "{}", termion::cursor::Goto(1, size.1))?;
-        // write!(screen, "{}", "hello")?;
-        write!(screen, "{}", state.path.to_string_lossy().to_string())?;
+        draw(&mut screen, &state)?;
         screen.flush()?;
 
         for c in stdin.keys() {
             write!(screen, "{}", termion::clear::All)?;
             match c {
                 Ok(Key::Char('q')) => break,
+                Ok(Key::Up) => state.selected_file = state.selected_file.saturating_sub(1),
+                Ok(Key::Down) => {
+                    state.selected_file = (state.selected_file + 1).min(state.files.len() - 1)
+                }
                 _ => {}
             }
-            // TODO: draw
+            draw(&mut screen, &state)?;
             screen.flush()?;
         }
 
         write!(screen, "{}", termion::style::Reset)?;
     }
+
+    Ok(())
+}
+
+fn draw<W: Write>(w: &mut W, state: &State) -> std::result::Result<(), std::io::Error> {
+    write!(w, "{}", termion::cursor::Goto(1, 1))?;
+    for (i, s) in (&state.files).iter().enumerate() {
+        if s.is_dir {
+            write!(
+                w,
+                "{}{}",
+                termion::style::Bold,
+                termion::color::Fg(termion::color::LightBlue)
+            )?;
+        }
+        if i == state.selected_file {
+            write!(
+                w,
+                "{}",
+                termion::color::Bg(termion::color::AnsiValue::grayscale(5))
+            )?;
+        }
+        write!(w, "{}\r\n", s.name)?;
+        write!(w, "{}", termion::style::Reset)?;
+    }
+    write!(w, "{}", termion::cursor::Goto(1, state.term_size.1))?;
+    write!(w, "{}", state.base_path.to_string_lossy().to_string())?;
 
     Ok(())
 }
