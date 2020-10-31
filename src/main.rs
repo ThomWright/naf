@@ -51,6 +51,18 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
             }) => {
                 state.on_down();
             }
+            Event::Key(KeyEvent {
+                code: KeyCode::Left,
+                ..
+            }) => {
+                state.on_left();
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::Right,
+                ..
+            }) => {
+                state.on_right();
+            }
             _ => {}
         }
         draw(&mut terminal, &state)?;
@@ -61,9 +73,65 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
 
 struct State {
     base_path: std::path::PathBuf,
-    dirs: [Vec<FileInfo>; 2],
-    selected_dir: usize,
-    selected_file: usize,
+    flists: [FileList; 2],
+    selected_flist: usize,
+}
+
+struct FileList {
+    files: Vec<FileInfo>,
+    selected_file: Option<usize>,
+}
+impl FileList {
+    fn get_selected_file(&self) -> Option<&FileInfo> {
+        match self.selected_file {
+            None => None,
+            Some(i) => self.files.get(i),
+        }
+    }
+
+    fn unselect_file(&mut self) {
+        self.selected_file = None
+    }
+
+    fn select_first(&mut self) {
+        if self.files.len() > 0 {
+            self.selected_file = Some(0);
+        }
+    }
+
+    /// Select next file in list, returning whether the file selection has changed.
+    fn select_next(&mut self) -> bool {
+        let prev = self.selected_file;
+        if let Some(selected) = self.selected_file {
+            self.selected_file = Some((selected + 1).min(self.files.len().saturating_sub(1)));
+        }
+        if prev != self.selected_file {
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Select previous file in list, returning whether the file selection has changed.
+    fn select_prev(&mut self) -> bool {
+        let prev = self.selected_file;
+        if let Some(selected) = self.selected_file {
+            self.selected_file = Some(selected.saturating_sub(1));
+        }
+        if prev != self.selected_file {
+            true
+        } else {
+            false
+        }
+    }
+}
+impl Default for FileList {
+    fn default() -> Self {
+        FileList {
+            files: vec![],
+            selected_file: None,
+        }
+    }
 }
 
 struct FileInfo {
@@ -77,30 +145,41 @@ impl State {
     fn new() -> Result<State, std::io::Error> {
         let init_path = std::env::current_dir()?;
         let current_dir_files = State::read_file_list(&init_path);
+        let selected_file = current_dir_files.first().map(|_| 0);
 
-        let selected_dir = 0;
-        let selected_file = 0;
-
-        let dirs = [current_dir_files, vec![]];
+        let flists = [
+            FileList {
+                files: current_dir_files,
+                selected_file,
+            },
+            FileList::default(),
+        ];
 
         let mut state = State {
             base_path: init_path,
-            dirs,
-            selected_dir,
-            selected_file,
+            flists,
+            selected_flist: 0,
         };
 
-        state.dirs[1] = state.files_in_selected_dir();
+        state.flists[1] = FileList {
+            files: state.files_in_selected_dir(),
+            selected_file: None,
+        };
 
         Ok(state)
     }
 
     fn files_in_selected_dir(&self) -> Vec<FileInfo> {
-        self.dirs[self.selected_dir]
-            .get(self.selected_file)
-            .filter(|f| f.is_dir)
-            .map(|f| State::read_file_list(&f.path))
-            .unwrap_or_default()
+        match self.current_list().get_selected_file() {
+            None => Vec::default(),
+            Some(file) => {
+                if file.is_dir {
+                    State::read_file_list(&file.path)
+                } else {
+                    Vec::default()
+                }
+            }
+        }
     }
 
     fn read_file_list<P: AsRef<Path>>(path: &P) -> Vec<FileInfo> {
@@ -124,20 +203,66 @@ impl State {
         files
     }
 
+    fn space_to_right(&self) -> bool {
+        self.selected_flist < (self.flists.len() - 1)
+    }
+
+    fn refresh_files_to_right(&mut self) {
+        if self.space_to_right() {
+            self.flists[self.selected_flist + 1] = FileList {
+                files: self.files_in_selected_dir(),
+                selected_file: None,
+            };
+        }
+    }
+
+    fn can_move_left(&self) -> bool {
+        self.selected_flist != 0
+    }
+    fn can_move_right(&self) -> bool {
+        self.space_to_right()
+            && self
+                .current_list()
+                .get_selected_file()
+                .map_or(false, |f| f.is_dir)
+    }
+
+    fn current_list(&self) -> &FileList {
+        &self.flists[self.selected_flist]
+    }
+
+    fn current_list_mut(&mut self) -> &mut FileList {
+        &mut self.flists[self.selected_flist]
+    }
+
+    fn selected_file_in_list(&self, list: usize) -> Option<usize> {
+        self.flists.get(list).and_then(|l| l.selected_file)
+    }
+
     fn on_up(&mut self) {
-        self.selected_file = self.selected_file.saturating_sub(1);
-        self.dirs[1] = self.files_in_selected_dir();
+        if self.current_list_mut().select_prev() {
+            self.refresh_files_to_right();
+        }
     }
 
     fn on_down(&mut self) {
-        let list_len = self
-            .dirs
-            .get(self.selected_dir)
-            .map(|l| l.len())
-            .unwrap_or(0);
-        self.selected_file = (self.selected_file + 1).min(list_len.saturating_sub(1));
+        if self.current_list_mut().select_next() {
+            self.refresh_files_to_right();
+        }
+    }
 
-        self.dirs[1] = self.files_in_selected_dir();
+    fn on_left(&mut self) {
+        if self.can_move_left() {
+            self.current_list_mut().unselect_file();
+            self.selected_flist = self.selected_flist.saturating_sub(1);
+        }
+    }
+
+    fn on_right(&mut self) {
+        if self.can_move_right() {
+            self.selected_flist += 1;
+            self.current_list_mut().select_first();
+        }
     }
 }
 
@@ -178,13 +303,10 @@ fn draw_file_list<B: Backend>(f: &mut Frame<B>, area: Rect, state: &State, thing
     let list_block = Block::default().borders(Borders::NONE);
 
     let mut list_state = ListState::default();
-    list_state.select(if state.selected_dir == thing {
-        Some(state.selected_file)
-    } else {
-        None
-    });
+    list_state.select(state.selected_file_in_list(thing));
     let list = List::new(
-        state.dirs[thing]
+        state.flists[thing]
+            .files
             .iter()
             .map(|f| {
                 ListItem::new(vec![Spans::from(vec![if f.is_dir {
