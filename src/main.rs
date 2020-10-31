@@ -4,7 +4,7 @@ use std::io;
 use std::io::Write;
 use tui::backend::{Backend, CrosstermBackend};
 use tui::layout::{Alignment, Constraint, Direction, Layout};
-use tui::style::{Color, Style};
+use tui::style::{Color, Modifier, Style};
 use tui::text::{Span, Spans};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use tui::Terminal;
@@ -118,7 +118,9 @@ fn draw<B: Backend>(terminal: &mut Terminal<B>, state: &State) -> io::Result<()>
                         ListItem::new(vec![Spans::from(vec![if f.is_dir {
                             Span::styled(
                                 format!("{:<9}", &f.name),
-                                Style::default().fg(Color::LightBlue),
+                                Style::default()
+                                    .fg(Color::LightBlue)
+                                    .add_modifier(Modifier::BOLD),
                             )
                         } else {
                             Span::raw(&f.name)
