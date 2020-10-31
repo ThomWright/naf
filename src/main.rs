@@ -9,17 +9,6 @@ use tui::text::{Span, Spans};
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use tui::Terminal;
 
-struct State {
-    base_path: std::path::PathBuf,
-    files: Vec<FileInfo>,
-    selected_file: usize,
-}
-
-struct FileInfo {
-    name: String,
-    is_dir: bool,
-}
-
 fn main() -> crossterm::Result<()> {
     setup_panic();
 
@@ -40,7 +29,7 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
     terminal.hide_cursor()?;
 
-    let mut state = init_state()?;
+    let mut state = State::new()?;
 
     draw(&mut terminal, &state)?;
 
@@ -65,30 +54,42 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
     Ok(())
 }
 
-fn init_state() -> Result<State, std::io::Error> {
-    let init_path = std::env::current_dir()?;
-    let mut entries = init_path.as_path().read_dir().map_or(vec![], |contents| {
-        contents
-            .filter_map(Result::ok)
-            .map(|entry| {
-                let mut name = entry.file_name().to_string_lossy().to_string();
-                if entry.path().is_dir() {
-                    name.push('/');
-                }
-                FileInfo {
-                    name,
-                    is_dir: entry.path().is_dir(),
-                }
-            })
-            .collect()
-    });
-    entries.sort_by(|f1, f2| f1.name.cmp(&f2.name));
+struct State {
+    base_path: std::path::PathBuf,
+    files: Vec<FileInfo>,
+    selected_file: usize,
+}
 
-    Ok(State {
-        base_path: init_path,
-        files: entries,
-        selected_file: 0,
-    })
+struct FileInfo {
+    name: String,
+    is_dir: bool,
+}
+
+impl State {
+    fn new() -> Result<State, std::io::Error> {
+        let init_path = std::env::current_dir()?;
+        let mut entries = init_path.as_path().read_dir().map_or(vec![], |contents| {
+            contents
+                .filter_map(Result::ok)
+                .map(|entry| {
+                    let mut name = entry.file_name().to_string_lossy().to_string();
+                    if entry.path().is_dir() {
+                        name.push('/');
+                    }
+                    FileInfo {
+                        name,
+                        is_dir: entry.path().is_dir(),
+                    }
+                })
+                .collect()
+        });
+        entries.sort_by(|f1, f2| f1.name.cmp(&f2.name));
+        Ok(State {
+            base_path: init_path,
+            files: entries,
+            selected_file: 0,
+        })
+    }
 }
 
 fn draw<B: Backend>(terminal: &mut Terminal<B>, state: &State) -> io::Result<()> {
