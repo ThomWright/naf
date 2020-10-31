@@ -5,5 +5,5 @@ authors = ["Thom Wright <dev@thomwright.co.uk>"]
 edition = "2018"
 
 [dependencies]
-termion = "1.5.5"
-tui = "0.12.0"
+crossterm = "0.18.2"
+tui = { version = "0.12", default-features = false, features = ['crossterm'] }

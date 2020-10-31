@@ -1,12 +1,8 @@
+use crossterm::event::{Event, KeyCode, KeyEvent};
+use crossterm::{cursor, execute, terminal};
 use std::io;
-use std::io::Read;
 use std::io::Write;
-use termion::event::Key;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
-use termion::screen::AlternateScreen;
-use tui::backend::Backend;
-use tui::backend::TermionBackend;
+use tui::backend::{Backend, CrosstermBackend};
 use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Style};
 use tui::text::{Span, Spans};
@@ -24,42 +20,43 @@ struct FileInfo {
     is_dir: bool,
 }
 
-fn main() -> Result<(), std::io::Error> {
-    // Open issues:
-    // - https://gitlab.redox-os.org/redox-os/termion/-/issues/176
-    // - https://github.com/fdehau/tui-rs/issues/177
-    // Turning this on lets us see some panic output, but prevents restoring from raw mode when exiting normally.
-    if let Ok(_) = std::env::var("HANDLE_PANIC") {
-        setup_panic();
-    }
+fn main() -> crossterm::Result<()> {
+    setup_panic();
 
-    // Get and lock the stdios so we don't have to get the lock all the time
-    let stdin = io::stdin();
-    let stdin = stdin.lock();
     let stdout = io::stdout();
-    let stdout = stdout.lock();
+    let mut stdout = stdout.lock();
 
-    run(stdin, stdout)?;
+    execute!(stdout, terminal::EnterAlternateScreen)?;
+    terminal::enable_raw_mode()?;
+
+    run(stdout)?;
+
+    cleanup_terminal();
 
     Ok(())
 }
 
-fn run<R: Read, W: Write>(stdin: R, stdout: W) -> Result<(), std::io::Error> {
-    let screen = AlternateScreen::from(stdout.into_raw_mode()?);
-    let mut terminal = Terminal::new(TermionBackend::new(screen))?;
+fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout))?;
     terminal.hide_cursor()?;
 
     let mut state = init_state()?;
 
     draw(&mut terminal, &state)?;
 
-    for c in stdin.keys() {
-        match c {
-            Ok(Key::Char('q')) => break,
-            Ok(Key::Up) => state.selected_file = state.selected_file.saturating_sub(1),
-            Ok(Key::Down) => {
-                state.selected_file = (state.selected_file + 1).min(state.files.len() - 1)
-            }
+    loop {
+        match crossterm::event::read()? {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char('q'),
+                ..
+            }) => break,
+            Event::Key(KeyEvent {
+                code: KeyCode::Up, ..
+            }) => state.selected_file = state.selected_file.saturating_sub(1),
+            Event::Key(KeyEvent {
+                code: KeyCode::Down,
+                ..
+            }) => state.selected_file = (state.selected_file + 1).min(state.files.len() - 1),
             _ => {}
         }
         draw(&mut terminal, &state)?;
@@ -145,12 +142,18 @@ fn draw<B: Backend>(terminal: &mut Terminal<B>, state: &State) -> io::Result<()>
 }
 
 fn setup_panic() {
-    let raw_handle = io::stdout().into_raw_mode().unwrap();
     let default_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        raw_handle
-            .suspend_raw_mode()
-            .unwrap_or_else(|e| eprintln!("Could not suspend raw mode: {}", e));
+        cleanup_terminal();
         default_hook(info);
     }));
+}
+
+fn cleanup_terminal() {
+    let mut stdout = io::stdout();
+
+    execute!(stdout, terminal::LeaveAlternateScreen).unwrap();
+    execute!(stdout, cursor::Show).unwrap();
+
+    terminal::disable_raw_mode().unwrap();
 }
