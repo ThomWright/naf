@@ -98,7 +98,8 @@ impl FileList {
     fn select_next(&mut self) -> bool {
         let prev = self.selected_file;
         if let Some(selected) = self.selected_file {
-            self.selected_file = Some((selected + 1).min(self.files.len().saturating_sub(1)));
+            self.selected_file =
+                Some((selected + 1).min(self.files.len().saturating_sub(1)));
         }
         if prev != self.selected_file {
             true
@@ -192,7 +193,8 @@ impl State {
             contents
                 .filter_map(Result::ok)
                 .map(|entry| {
-                    let mut name = entry.file_name().to_string_lossy().to_string();
+                    let mut name =
+                        entry.file_name().to_string_lossy().to_string();
                     if entry.path().is_dir() {
                         name.push('/');
                     }
@@ -265,7 +267,8 @@ impl State {
             self.current_list_mut().unselect_file();
 
             let files = State::read_file_list(&parent);
-            let selected_file = files.binary_search_by_key(&self.base_path, |f| f.path.clone());
+            let selected_file =
+                files.binary_search_by_key(&self.base_path, |f| f.path.clone());
             self.flists = [
                 FileList {
                     files,
@@ -304,7 +307,10 @@ impl State {
     }
 }
 
-fn draw<B: Backend>(terminal: &mut Terminal<B>, state: &State) -> io::Result<()> {
+fn draw<B: Backend>(
+    terminal: &mut Terminal<B>,
+    state: &State,
+) -> io::Result<()> {
     terminal.draw(|f| {
         let frame_chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -326,7 +332,10 @@ fn draw<B: Backend>(terminal: &mut Terminal<B>, state: &State) -> io::Result<()>
             let list_chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .margin(0)
-                .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
+                .constraints(
+                    [Constraint::Percentage(50), Constraint::Percentage(50)]
+                        .as_ref(),
+                )
                 .split(files_block_inner_area);
 
             draw_file_list(f, list_chunks[0], &state, 0);
@@ -337,7 +346,12 @@ fn draw<B: Backend>(terminal: &mut Terminal<B>, state: &State) -> io::Result<()>
     })
 }
 
-fn draw_file_list<B: Backend>(f: &mut Frame<B>, area: Rect, state: &State, thing: usize) {
+fn draw_file_list<B: Backend>(
+    f: &mut Frame<B>,
+    area: Rect,
+    state: &State,
+    thing: usize,
+) {
     let list_block = Block::default().borders(Borders::NONE);
 
     let mut list_state = ListState::default();
