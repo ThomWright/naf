@@ -71,12 +71,7 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
     Ok(())
 }
 
-struct State {
-    base_path: std::path::PathBuf,
-    flists: [FileList; 2],
-    selected_flist: usize,
-}
-
+#[derive(Debug, Clone)]
 struct FileList {
     files: Vec<FileInfo>,
     selected_file: Option<usize>,
@@ -134,6 +129,7 @@ impl Default for FileList {
     }
 }
 
+#[derive(Debug, Clone)]
 struct FileInfo {
     name: String,
     is_dir: bool,
@@ -141,6 +137,15 @@ struct FileInfo {
     path: PathBuf,
 }
 
+// TODO: define `current` and `selected`
+#[derive(Debug, Clone)]
+struct State {
+    base_path: std::path::PathBuf,
+    flists: [FileList; 2],
+    selected_flist: usize,
+}
+
+// FIXME: don't allow state of selecting a list with no files in it
 impl State {
     fn new() -> Result<State, std::io::Error> {
         let init_path = std::env::current_dir()?;
@@ -216,15 +221,14 @@ impl State {
         }
     }
 
-    fn can_move_left(&self) -> bool {
-        self.selected_flist != 0
+    fn selected_file_is_dir(&self) -> bool {
+        self.current_list()
+            .get_selected_file()
+            .map_or(false, |f| f.is_dir)
     }
-    fn can_move_right(&self) -> bool {
-        self.space_to_right()
-            && self
-                .current_list()
-                .get_selected_file()
-                .map_or(false, |f| f.is_dir)
+
+    fn selected_file_path(&self) -> Option<&PathBuf> {
+        self.current_list().get_selected_file().map(|f| &f.path)
     }
 
     fn current_list(&self) -> &FileList {
@@ -252,16 +256,50 @@ impl State {
     }
 
     fn on_left(&mut self) {
-        if self.can_move_left() {
+        if self.selected_flist != 0 {
             self.current_list_mut().unselect_file();
-            self.selected_flist = self.selected_flist.saturating_sub(1);
+            self.selected_flist -= 1;
+        } else if let Some(parent) = self.base_path.parent() {
+            let parent = parent.to_owned();
+
+            self.current_list_mut().unselect_file();
+
+            let files = State::read_file_list(&parent);
+            let selected_file = files.binary_search_by_key(&self.base_path, |f| f.path.clone());
+            self.flists = [
+                FileList {
+                    files,
+                    // FIXME: I bet we can somehow go into a parent directory with no visible files...
+                    selected_file: selected_file.ok(),
+                },
+                self.flists[0].clone(),
+            ];
+
+            self.base_path = parent
         }
     }
 
     fn on_right(&mut self) {
-        if self.can_move_right() {
-            self.selected_flist += 1;
-            self.current_list_mut().select_first();
+        if self.selected_file_is_dir() {
+            if self.space_to_right() {
+                self.selected_flist += 1;
+                self.current_list_mut().select_first();
+            } else if let Some(selected_dir_path) = self.selected_file_path() {
+                let selected_dir_path = selected_dir_path.clone();
+
+                let files = State::read_file_list(&selected_dir_path);
+                let selected_file = files.first().map(|_| 0);
+                self.flists = [
+                    self.flists[1].clone(),
+                    FileList {
+                        files,
+                        selected_file,
+                    },
+                ];
+
+                // FIXME: no unwrap!
+                self.base_path = selected_dir_path.parent().unwrap().to_owned();
+            }
         }
     }
 }
