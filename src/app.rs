@@ -8,7 +8,7 @@ struct FileList {
 }
 impl FileList {
     fn new(files: Vec<FileInfo>) -> FileList {
-        let selected_file = if files.len() > 0 { Some(0) } else { None };
+        let selected_file = if files.is_empty() { None } else { Some(0) };
         FileList {
             files,
             selected_file,
@@ -41,11 +41,7 @@ impl FileList {
             self.selected_file =
                 Some((selected + 1).min(self.files.len().saturating_sub(1)));
         }
-        if prev != self.selected_file {
-            true
-        } else {
-            false
-        }
+        prev != self.selected_file
     }
 
     /// Select previous file in list, returning whether the file selection has changed.
@@ -54,11 +50,7 @@ impl FileList {
         if let Some(selected) = self.selected_file {
             self.selected_file = Some(selected.saturating_sub(1));
         }
-        if prev != self.selected_file {
-            true
-        } else {
-            false
-        }
+        prev != self.selected_file
     }
 
     fn select_next_by_n(&mut self, n: usize) -> bool {
@@ -67,11 +59,7 @@ impl FileList {
             self.selected_file =
                 Some((selected + n).min(self.files.len().saturating_sub(1)));
         }
-        if prev != self.selected_file {
-            true
-        } else {
-            false
-        }
+        prev != self.selected_file
     }
 
     fn select_prev_by_n(&mut self, n: usize) -> bool {
@@ -79,11 +67,7 @@ impl FileList {
         if let Some(selected) = self.selected_file {
             self.selected_file = Some(selected.saturating_sub(n));
         }
-        if prev != self.selected_file {
-            true
-        } else {
-            false
-        }
+        prev != self.selected_file
     }
 }
 
