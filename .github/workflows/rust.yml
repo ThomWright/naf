@@ -17,7 +17,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Print version
-      run: cargo --version
+      run: cargo --version && cargo clippy --version
     - name: Build
       run: cargo build --verbose
     - name: Check formatting
