@@ -228,7 +228,7 @@ impl State {
         let mut files = path.as_ref().read_dir().map_or(vec![], |contents| {
             contents
                 .filter_map(Result::ok)
-                .map(|entry| FileInfo::from(entry))
+                .map(FileInfo::from)
                 .collect()
         });
         files.sort_by(|f1, f2| f1.name.cmp(&f2.name));
