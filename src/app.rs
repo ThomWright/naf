@@ -60,6 +60,31 @@ impl FileList {
             false
         }
     }
+
+    fn select_next_by_n(&mut self, n: usize) -> bool {
+        let prev = self.selected_file;
+        if let Some(selected) = self.selected_file {
+            self.selected_file =
+                Some((selected + n).min(self.files.len().saturating_sub(1)));
+        }
+        if prev != self.selected_file {
+            true
+        } else {
+            false
+        }
+    }
+
+    fn select_prev_by_n(&mut self, n: usize) -> bool {
+        let prev = self.selected_file;
+        if let Some(selected) = self.selected_file {
+            self.selected_file = Some(selected.saturating_sub(n));
+        }
+        if prev != self.selected_file {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl Default for FileList {
@@ -138,6 +163,18 @@ impl State {
 
     pub fn on_down(&mut self) {
         if self.current_list_mut().select_next() {
+            self.refresh_files_to_right();
+        }
+    }
+
+    pub fn on_page_down(&mut self, distance: usize) {
+        if self.current_list_mut().select_next_by_n(distance) {
+            self.refresh_files_to_right();
+        }
+    }
+
+    pub fn on_page_up(&mut self, distance: usize) {
+        if self.current_list_mut().select_prev_by_n(distance) {
             self.refresh_files_to_right();
         }
     }

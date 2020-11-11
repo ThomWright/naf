@@ -29,8 +29,10 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
     terminal.hide_cursor()?;
 
     let mut state = app::State::new()?;
+    let mut ui_state = ui::UiState::default();
 
-    ui::draw(&mut terminal, &state)?;
+    let mut ui = ui::Ui::new(terminal);
+    ui.draw(&state, &mut ui_state)?;
 
     loop {
         match crossterm::event::read()? {
@@ -61,9 +63,23 @@ fn run<W: Write>(stdout: W) -> crossterm::Result<()> {
             }) => {
                 state.on_right();
             }
+            Event::Key(KeyEvent {
+                code: KeyCode::PageDown,
+                ..
+            }) => {
+                let h: usize = ui.list_height().into();
+                state.on_page_down(h - 1);
+            }
+            Event::Key(KeyEvent {
+                code: KeyCode::PageUp,
+                ..
+            }) => {
+                let h: usize = ui.list_height().into();
+                state.on_page_up(h - 1);
+            }
             _ => {}
         }
-        ui::draw(&mut terminal, &state)?;
+        ui.draw(&state, &mut ui_state)?;
     }
 
     Ok(())
